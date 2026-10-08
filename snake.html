@@ -1,0 +1,226 @@
+<html>
+    <head>
+        <style>
+            td {
+                width:30px;
+                height:30px;
+                border-style:solid;
+                border-color:black;
+                border-width:1px;
+            }
+            .black {
+                background: black;
+            }
+            .red {
+                background: red;
+            }
+        </style>
+    </head>
+    <body>
+        <fieldset>
+            <label>
+                speed
+                <input type="range" id="speed" min="1" max="100000" step="1" value="1" style="width: 800px">
+               
+            </label>
+        </fieldset>
+        <table>
+        </table>
+        Q-Table size: <span id="tablesize"></span>
+        Step: <span id="step"></span>
+        Game number: <span id="gamenumber"></span>
+        <script>
+            const table = document.getElementsByTagName('table')[0];
+
+            const worldWidth=5;
+
+            for(let i=0; i<worldWidth; i++) {
+                const tr = table.appendChild(document.createElement('tr'));
+                for(let j=0; j<worldWidth; j++) {
+                    tr.appendChild(document.createElement('td'));
+                }
+            }
+
+            const gridSize=worldWidth*worldWidth
+            const speed= document.getElementById('speed')
+            const step= document.getElementById('step')
+            const qsize=document.getElementById('tablesize')
+            const gameNumberElem=document.getElementById('gamenumber')
+            let headIndex=1;
+            let direction= 2; // 0:left, 1: down, 2:right, 3: up
+            const APPLE=gridSize+1
+            const grids = []; // 0: empty, 1 snake tail, 1-gridSize: shake body, gridSize+1: apple
+            for(let i=0; i<gridSize; i++) {
+                grids.push(0)
+            }
+            function reset() {
+                for(let i=0;i<gridSize;i++) {
+                    grids[i]=0
+                }
+                grids[0]=1
+                grids[1]=2
+                grids[5]=APPLE
+                direction=2;
+                headIndex=1;
+            }
+            function clearBoard() {
+                for (row of table.rows) {
+                    for (cell of row.cells) {
+                        cell.className=''
+                    }
+                }
+            }
+            function draw() {
+                grids.forEach((grid,i)=> {
+                    if(grid>0 && grid<=gridSize) {
+                        row=i===0?0:Math.floor(i/worldWidth)
+                        cell=i%worldWidth;
+                        table.rows[row].cells[cell].className='black'
+                    }
+                    else if(grid===APPLE) {
+                        row=i===0?0:Math.floor(i/worldWidth)
+                        cell=i%worldWidth;
+                        table.rows[row].cells[cell].className='red'
+
+                    }
+                })
+            }
+            function updateDirection(newDirection /* 0: left, 1: right, 2: do nothing*/) {
+                if(newDirection<2) {
+                    if(direction===0)
+                        direction=newDirection?3:1;
+                    else if(direction===1)
+                        direction=newDirection?0:2;
+                    else if(direction===2)
+                        direction=newDirection?1:3;
+                    else
+                        direction=newDirection?2:0;
+                }
+                const [reward, end] = updateState();
+                if(end) {
+                    reset()
+                }
+                clearBoard();
+                draw()
+                return [reward, end];
+            }
+            function insertApple() {
+                const freegrids=[]
+                for(let i=0;i<grids.length;i++) {
+                    if(grids[i]===0)
+                        freegrids.push(i)
+                }
+                const random = 1/freegrids.length
+                const newApplePosition=freegrids[Math.floor(Math.random()*freegrids.length)]
+                grids[newApplePosition]=APPLE
+                
+            }
+            function updateState() {
+                const snakeLength=grids[headIndex]
+                if(direction==0) {
+                    if ((headIndex-1)%worldWidth===9)
+                        headIndex+=9
+                    else
+                        headIndex-=1
+                }
+                else if(direction==2) {
+                    if ((headIndex+1)%worldWidth===0)
+                        headIndex-=9
+                    else
+                        headIndex+=1
+                }
+                else if(direction==1) {
+                    headIndex=(headIndex+worldWidth)%gridSize
+                }
+                else if(direction==3) {
+                    headIndex=(headIndex-worldWidth)%gridSize
+                    if(headIndex<0)
+                        headIndex+=gridSize
+                }
+                if(grids[headIndex]>1 && grids[headIndex]<=gridSize) {
+                    return [-10,true]
+                }
+                if(grids[headIndex]!==APPLE) {
+                    for(let i=0;i<gridSize;i++) {
+                        if(grids[i]>0 && grids[i]<gridSize) {
+                            grids[i]-=1
+                        }
+                    }
+                    grids[headIndex]=snakeLength
+                }
+                else {
+                    if(snakeLength===gridSize-1) {
+                        console.log('all grids filled')
+                        return [50, true]
+                    }
+                    // apple eaten
+                    grids[headIndex]=snakeLength+1
+                    insertApple()
+                    return [20, false]
+                }
+                return [0, false];
+            }
+            reset()
+            window.addEventListener('keydown', (e) => {
+                if(e.code=='ArrowLeft')
+                    updateDirection(0)
+                if(e.code=='ArrowRight')
+                    updateDirection(1)
+                if(e.code=='Space')
+                    updateDirection(2)
+
+            })
+            /// Machine learning stuff
+            const qTable=new Map() // Nested table with rewards [left, right, doNothing]
+            const learningRate = 0.8
+            const discountFactor=0.95
+
+            oldState=JSON.stringify(grids)
+
+            requestAnimationFrame(function frame() {
+                gameNumberElem.innerText=gameNumber
+                step.innerText=stepNumber
+                qsize.innerText=qTable.size
+                draw()
+                requestAnimationFrame(frame)
+            })
+             function getQTableValue(state) {
+                let actionValues = qTable.get(state)
+                if(typeof actionValues === 'undefined') {
+                    actionValues=[0,0,0]
+                    qTable.set(state, actionValues);
+                }
+                return actionValues;
+            }
+            let stepNumber=0
+            let gameNumber=1
+            setTimeout(function main() {
+                for(l=0;l<speed.valueAsNumber;l++) {
+                    stepNumber=stepNumber+1
+                    const actionValues = getQTableValue(oldState)
+                    if(Math.random()<0.02) {
+                        bestAction = Math.floor(Math.random()*3)
+                    } else {
+                        var bestAction = actionValues.indexOf(Math.max(...actionValues))
+                    }
+                    const [reward, end] = updateDirection(bestAction)
+                    const newState=JSON.stringify(grids)
+                    if(end) {
+                        var increase = learningRate*(reward-actionValues[bestAction]);
+                        gameNumber++;
+                    } else {
+                        const nextStateActions=getQTableValue(newState);
+                        const bestNextActionReward=Math.max(...nextStateActions)
+                        const bestNextAction = nextStateActions.indexOf(bestNextActionReward)
+                        var increase = learningRate*(reward+discountFactor*bestNextActionReward- actionValues[bestAction]);
+                    }
+                    actionValues[bestAction] += increase
+                    oldState=newState
+                };
+                setTimeout(() => {
+                    main()
+                }, 200)
+            })
+        </script>
+    </body>
+</html>
