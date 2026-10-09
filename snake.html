@@ -27,7 +27,11 @@
             </label><br>
             <label>
                 Propability for random action
-                <input type="number" value="0.04" id="random" min="0.01" max="0.99" step="0.01"/>
+                <input type="number" value="0.04" id="random" min="0" max="1" step="0.01"/>
+            </label>
+            <label>
+                Learning rate
+                <input type="number" value="0.7" id="learningrate" min="0.1" max="1" step="0.1"/>
             </label>
         </fieldset>
         <table>
@@ -52,6 +56,7 @@
             const randomElem= document.getElementById('random')
             const step= document.getElementById('step')
             const qsize=document.getElementById('tablesize')
+            const learningRateElem=document.getElementById('learningrate')
             const gameNumberElem=document.getElementById('gamenumber')
             let headIndex=1;
             let direction= 2; // 0:left, 1: down, 2:right, 3: up
@@ -111,8 +116,6 @@
                 if(end) {
                     reset()
                 }
-                clearBoard();
-                draw()
                 return [reward, end];
             }
             function insertApple() {
@@ -175,7 +178,6 @@
 
             /// Machine learning stuff
             const qTable=new Map() // Nested table with rewards [left, right, doNothing]
-            const learningRate = 0.7
             const discountFactor=0.95
 
             oldState=JSON.stringify(grids)
@@ -184,6 +186,7 @@
                 gameNumberElem.innerText=gameNumber
                 step.innerText=stepNumber
                 qsize.innerText=qTable.size
+                clearBoard();
                 draw()
                 requestAnimationFrame(frame)
             })
@@ -210,13 +213,13 @@
                     const [reward, end] = updateDirection(bestAction)
                     const newState=JSON.stringify(grids)
                     if(end) {
-                        var increase = learningRate*(reward-actionValues[bestAction]);
+                        var increase = learningRateElem.valueAsNumber*(reward-actionValues[bestAction]);
                         gameNumber++;
                     } else {
                         const nextStateActions=getQTableValue(newState);
                         const bestNextActionReward=Math.max(...nextStateActions)
                         const bestNextAction = nextStateActions.indexOf(bestNextActionReward)
-                        var increase = learningRate*(reward+discountFactor*bestNextActionReward- actionValues[bestAction]);
+                        var increase = learningRateElem.valueAsNumber*(reward+discountFactor*bestNextActionReward- actionValues[bestAction]);
                     }
                     actionValues[bestAction] += increase
                     oldState=newState
